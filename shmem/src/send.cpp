@@ -8,14 +8,26 @@
 
 #include "shmem.hpp"
 
-static constexpr size_t SHMEM_BUFFER_SIZE = 4;
+static constexpr size_t DEFAULT_BUFFER_SIZE = 4;
 
 int
 main(int argc, char **argv)
 {
-    if (argc != 2) {
-        std::cerr << "usage: " << argv[0] << " NAME\n";
+    if (2 > argc || argc > 3) {
+        std::cerr << "usage: " << argv[0] << " NAME [BUFSIZE]\n";
         return 2;
+    }
+
+    size_t bufsize = DEFAULT_BUFFER_SIZE;
+    if (argc >= 3) {
+        if (std::sscanf(argv[2], "%zu", &bufsize) != 1) {
+            std::cerr << argv[0] << ": invalid buffer size\n";
+            return 2;
+        }
+        if (bufsize == 0) {
+            std::cerr << argv[0] << ": buffer size must be > 0\n";
+            return 2;
+        }
     }
 
     std::string shmname {"/shmem-"};
@@ -28,7 +40,7 @@ main(int argc, char **argv)
     }
 
     {
-        ShmemBuffer shm {shmfd, SHMEM_BUFFER_SIZE};
+        ShmemBuffer shm {shmfd, bufsize};
 
         std::string buf;
         for (;;) {
@@ -39,12 +51,12 @@ main(int argc, char **argv)
 
             buf.push_back('\n');
 
-            for (auto iter = buf.begin(); iter != buf.end();) {
+            const char *end = buf.data() + buf.size() + 1;
+            for (const char *iter = buf.data(); iter != end;) {
                 shm.waitWrite();
 
-                auto tail = std::min(iter + shm.size() - 1, buf.end());
-                auto endpart = std::copy(iter, tail, shm.begin());
-                *endpart = 0;
+                auto tail = std::min(iter + shm.size(), end);
+                std::copy(iter, tail, shm.begin());
 
                 iter = tail;
 

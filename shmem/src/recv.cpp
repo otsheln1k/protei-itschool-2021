@@ -29,7 +29,13 @@ main(int argc, char **argv)
         ShmemBuffer shm {shmfd};
 
         while (shm.waitRead()) {
-            std::string s {reinterpret_cast<const char *>(shm.data())};
+            const char *payload = reinterpret_cast<const char *>(shm.data());
+
+            const void *dataend = std::memchr(shm.data(), 0, shm.size());
+            const char *end = reinterpret_cast<const char *>(
+                (dataend == nullptr) ? shm.data() + shm.size() : dataend);
+
+            std::string s {payload, end};
 
             std::cout << s;
             std::cout.flush();
