@@ -11,7 +11,7 @@ class ShmemBuffer {
 
     void *m_buf = nullptr;
     size_t m_size = 0;
-    bool m_isWriteEnd = false;
+    bool m_doCleanup = false;
 
     size_t mappingSize() const;
 
@@ -20,6 +20,9 @@ class ShmemBuffer {
     sem_t *readSemaphore();
 
     static void semWait(sem_t *sem);
+    static int semGetValue(sem_t *sem);
+
+    bool checkEof(sem_t *sem);
 
 public:
     ShmemBuffer() {}
@@ -40,7 +43,7 @@ public:
     ShmemBuffer &operator=(ShmemBuffer &&p);
 
     // Wait until buffer can be written to.
-    void waitWrite();
+    bool waitWrite();
 
     // Mark buffer as closed from write end.
     void sendWriteEof();

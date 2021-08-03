@@ -5,8 +5,18 @@
 
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 #include "shmem.hpp"
+
+static bool saw_sigint = false;
+
+static void
+handle_sigint(int)
+{
+    saw_sigint = true;
+    std::cerr.put('\n');
+}
 
 int
 main(int argc, char **argv)
@@ -14,6 +24,15 @@ main(int argc, char **argv)
     if (argc != 2) {
         std::cerr << "usage: " << argv[0] << " NAME\n";
         return 2;
+    }
+
+    struct sigaction sa;
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, nullptr) < 0) {
+        std::perror("sigaction(SIGINT)");
+        return 1;
     }
 
     std::string shmname {"/shmem-"};
@@ -28,7 +47,24 @@ main(int argc, char **argv)
     {
         ShmemBuffer shm {shmfd};
 
-        while (shm.waitRead()) {
+        for (;;) {
+            if (saw_sigint) {
+                shm.sendReadEof();
+                break;
+            }
+
+            try {
+                if (!shm.waitRead()) {
+                    break;
+                }
+            } catch (const std::system_error &e) {
+                if (e.code().value() == EINTR) {
+                    continue;
+                } else {
+                    throw;
+                }
+            }
+
             const char *payload = reinterpret_cast<const char *>(shm.data());
 
             const void *dataend = std::memchr(shm.data(), 0, shm.size());

@@ -29,11 +29,21 @@ ShmemBuffer::semWait(sem_t *sem)
     }
 }
 
+int
+ShmemBuffer::semGetValue(sem_t *sem)
+{
+    int val;
+    if (sem_getvalue(sem, &val) < 0) {
+        throw errno_exception();
+    }
+    return val;
+}
+
 ShmemBuffer::ShmemBuffer(int fd, size_t size, bool write,
                          int flags, off_t offset)
-    :m_size{size}, m_isWriteEnd{write}
+    :m_size{size}
 {
-    if (m_isWriteEnd) {
+    if (write) {
         if (ftruncate(fd, mappingSize()) < 0) {
             throw errno_exception();
         }
@@ -45,7 +55,7 @@ ShmemBuffer::ShmemBuffer(int fd, size_t size, bool write,
         throw errno_exception();
     }
 
-    if (m_isWriteEnd) {
+    if (write) {
         sem_init(writeSemaphore(), 1, 1);
         sem_init(readSemaphore(), 1, 0);
     }
@@ -58,7 +68,7 @@ ShmemBuffer::ShmemBuffer(int fd, bool write)
 ShmemBuffer::~ShmemBuffer()
 {
     if (m_buf != nullptr) {
-        if (!m_isWriteEnd) {
+        if (m_doCleanup) {
             sem_destroy(writeSemaphore());
             sem_destroy(readSemaphore());
         }
@@ -72,7 +82,7 @@ ShmemBuffer::swap(ShmemBuffer &p)
 {
     std::swap(m_buf, p.m_buf);
     std::swap(m_size, p.m_size);
-    std::swap(m_isWriteEnd, m_isWriteEnd);
+    std::swap(m_doCleanup, m_doCleanup);
 }
 
 ShmemBuffer::ShmemBuffer(ShmemBuffer &&p)
@@ -91,15 +101,27 @@ ShmemBuffer::operator=(ShmemBuffer &&p)
     return *this;
 }
 
-void
+bool
+ShmemBuffer::checkEof(sem_t *sem)
+{
+    bool eof = semGetValue(sem) > 0;
+    if (eof) {
+        m_doCleanup = true;
+    }
+    return !eof;
+}
+
+bool
 ShmemBuffer::waitWrite()
 {
     semWait(writeSemaphore());
+    return checkEof(readSemaphore());
 }
 
 void
 ShmemBuffer::sendWriteEof()
 {
+    m_doCleanup = false;
     sem_post(writeSemaphore());
     sem_post(readSemaphore());
 }
@@ -107,6 +129,7 @@ ShmemBuffer::sendWriteEof()
 void
 ShmemBuffer::sendReadEof()
 {
+    m_doCleanup = false;
     sem_post(readSemaphore());
     sem_post(writeSemaphore());
 }
@@ -121,12 +144,7 @@ bool
 ShmemBuffer::waitRead()
 {
     semWait(readSemaphore());
-
-    int val;
-    if (sem_getvalue(writeSemaphore(), &val) < 0) {
-        throw errno_exception();
-    }
-    return val <= 0;
+    return checkEof(writeSemaphore());
 }
 
 void

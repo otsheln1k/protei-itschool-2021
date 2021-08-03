@@ -5,8 +5,18 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <signal.h>
 
 #include "shmem.hpp"
+
+static bool saw_sigint = false;
+
+static void
+handle_sigint(int)
+{
+    saw_sigint = true;
+    std::cerr.put('\n');
+}
 
 static constexpr size_t DEFAULT_BUFFER_SIZE = 4;
 
@@ -30,6 +40,15 @@ main(int argc, char **argv)
         }
     }
 
+    struct sigaction sa;
+    sa.sa_handler = handle_sigint;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    if (sigaction(SIGINT, &sa, nullptr) < 0) {
+        std::perror("sigaction(SIGINT)");
+        return 1;
+    }
+
     std::string shmname {"/shmem-"};
     shmname.append(argv[1]);
 
@@ -43,9 +62,11 @@ main(int argc, char **argv)
         ShmemBuffer shm {shmfd, bufsize};
 
         std::string buf;
-        for (;;) {
+        bool done = false;
+        while (!done) {
             std::getline(std::cin, buf);
-            if (std::cin.eof()) {
+            if (saw_sigint
+                || std::cin.eof()) {
                 break;
             }
 
@@ -53,7 +74,11 @@ main(int argc, char **argv)
 
             const char *end = buf.data() + buf.size() + 1;
             for (const char *iter = buf.data(); iter != end;) {
-                shm.waitWrite();
+                if (!shm.waitWrite()) {
+                    std::cerr << argv[0] << ": channel closed on read end\n";
+                    done = true;
+                    break;
+                }
 
                 auto tail = std::min(iter + shm.size(), end);
                 std::copy(iter, tail, shm.begin());
