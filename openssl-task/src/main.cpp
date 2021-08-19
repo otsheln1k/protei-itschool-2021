@@ -21,11 +21,23 @@ do_fingerprint(BIO *b, const char *label)
         return false;
     }
 
-    uint8_t buf[EVP_MAX_MD_SIZE];
-    unsigned dlen;
-    if (!X509_digest(cert.get(), EVP_sha256(), buf, &dlen)) {
+    const EVP_MD *alg = EVP_sha256();
+    int size = EVP_MD_size(alg);
+
+    if (size <= 0 || EVP_MAX_MD_SIZE < size) {
+        throw std::runtime_error{"Invalid digest size"};
+    }
+
+    uint8_t buf[size];          // size is bounded
+
+    unsigned dlen = 0;
+    if (!X509_digest(cert.get(), alg, buf, &dlen)) {
         std::cerr << label << ": Failed to calculate digest\n";
         return false;
+    }
+
+    if (dlen != static_cast<unsigned>(size)) {
+        throw std::runtime_error{"Unexpected digest size"};
     }
 
     std::cout << label << ": ";
