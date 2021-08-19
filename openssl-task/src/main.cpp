@@ -51,35 +51,44 @@ do_fingerprint(BIO *b, const char *label)
     return true;
 }
 
+using BIO_ptr = std::unique_ptr<BIO, decltype(&BIO_free)>;
+
+// Only open stdin BIO once
+static bool
+fingerprint_stdin(BIO_ptr &bio)
+{
+    if (!bio) {
+        bio.reset(BIO_new_fp(stdin, 0));
+    }
+    return do_fingerprint(bio.get(), "-");
+}
+
+static bool
+fingerprint_file(const char *fname)
+{
+    BIO_ptr bio {BIO_new_file(fname, "r"), &BIO_free};
+    return do_fingerprint(bio.get(), fname);
+}
+
 // usage: calcdigest [ CERT1 [CERT2 ...]]
 // No CERTs => read one from stdin
 // If CERT is ‘-’, read from stdin, Multiple ‘-’ are supported.
 int
 main(int argc, char **argv)
 {
-    using BIO_ptr = std::unique_ptr<BIO, decltype(&BIO_free)>;
+    BIO_ptr stdin_bio {nullptr, &BIO_free};
 
     if (argc == 1) {
-        BIO_ptr bio {BIO_new_fp(stdin, 0), &BIO_free};
-        return do_fingerprint(bio.get(), "-") ? 0 : 1;
+        return fingerprint_stdin(stdin_bio) ? 0 : 1;
     }
-
-    BIO_ptr stdin_bio {nullptr, &BIO_free};
 
     bool all_ok = true;
     for (int argi = 1; argi < argc; ++argi) {
         const char *a = argv[argi];
 
-        bool ok;
-        if (!std::strcmp(a, "-")) {
-            if (!stdin_bio) {
-                stdin_bio.reset(BIO_new_fp(stdin, 0));
-            }
-            ok = do_fingerprint(stdin_bio.get(), a);
-        } else {
-            BIO_ptr bio {BIO_new_file(a, "r"), &BIO_free};
-            ok = do_fingerprint(bio.get(), a);
-        }
+        bool ok = (!std::strcmp(a, "-"))
+            ? fingerprint_stdin(stdin_bio)
+            : fingerprint_file(a);
 
         all_ok = ok && all_ok;
     }
