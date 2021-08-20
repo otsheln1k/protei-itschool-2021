@@ -87,9 +87,7 @@ ShmemBuffer::swap(ShmemBuffer &p)
 
 ShmemBuffer::ShmemBuffer(ShmemBuffer &&p)
 {
-    swap(p);
-    ShmemBuffer b;
-    p.swap(b);
+    *this = std::move(p);
 }
 
 ShmemBuffer &

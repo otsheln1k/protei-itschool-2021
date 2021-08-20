@@ -8,24 +8,8 @@
 #include <unistd.h>
 
 class ShmemBuffer {
-
-    void *m_buf = nullptr;
-    size_t m_size = 0;
-    bool m_doCleanup = false;
-
-    size_t mappingSize() const;
-
-    sem_t *writeSemaphore();
-
-    sem_t *readSemaphore();
-
-    static void semWait(sem_t *sem);
-    static int semGetValue(sem_t *sem);
-
-    bool checkEof(sem_t *sem);
-
 public:
-    ShmemBuffer() {}
+    ShmemBuffer() =default;
 
     ShmemBuffer(int fd, size_t size, bool write = true,
                 int flags = MAP_SHARED, off_t offset = 0);
@@ -76,6 +60,23 @@ public:
 
     const_iterator begin() const { return data(); }
     const_iterator end() const { return data() + m_size; }
+
+private:
+    size_t mappingSize() const;
+
+    sem_t *writeSemaphore();
+
+    sem_t *readSemaphore();
+
+    static void semWait(sem_t *sem);
+    static int semGetValue(sem_t *sem);
+
+    bool checkEof(sem_t *sem);
+
+    void *m_buf = nullptr;
+    size_t m_size = 0;
+    bool m_doCleanup = false;
+
 };
 
 #endif
