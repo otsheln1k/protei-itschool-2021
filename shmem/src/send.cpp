@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <signal.h>
 
+#include "common.hpp"
 #include "shmem.hpp"
 
 static bool saw_sigint = false;
@@ -25,18 +26,18 @@ main(int argc, char **argv)
 {
     if (2 > argc || argc > 3) {
         std::cerr << "usage: " << argv[0] << " NAME [BUFSIZE]\n";
-        return 2;
+        return EC_BAD_USAGE;
     }
 
     size_t bufsize = DEFAULT_BUFFER_SIZE;
     if (argc >= 3) {
         if (std::sscanf(argv[2], "%zu", &bufsize) != 1) {
             std::cerr << argv[0] << ": invalid buffer size\n";
-            return 2;
+            return EC_BAD_USAGE;
         }
         if (bufsize == 0) {
             std::cerr << argv[0] << ": buffer size must be > 0\n";
-            return 2;
+            return EC_BAD_USAGE;
         }
     }
 
@@ -46,7 +47,7 @@ main(int argc, char **argv)
     sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, nullptr) < 0) {
         std::perror("sigaction(SIGINT)");
-        return 1;
+        return EC_ERROR;
     }
 
     std::string shmname {"/shmem-"};
@@ -55,7 +56,7 @@ main(int argc, char **argv)
     int shmfd = shm_open(shmname.data(), O_RDWR | O_CREAT, 0600);
     if (shmfd < 0) {
         std::perror("shm_open");
-        return 1;
+        return EC_ERROR;
     }
 
     {
@@ -92,5 +93,5 @@ main(int argc, char **argv)
         shm.sendWriteEof();
     }
 
-    return 0;
+    return EC_SUCCESS;
 }

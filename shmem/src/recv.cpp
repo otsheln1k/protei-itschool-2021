@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <signal.h>
 
+#include "common.hpp"
 #include "shmem.hpp"
 
 static bool saw_sigint = false;
@@ -23,7 +24,7 @@ main(int argc, char **argv)
 {
     if (argc != 2) {
         std::cerr << "usage: " << argv[0] << " NAME\n";
-        return 2;
+        return EC_BAD_USAGE;
     }
 
     struct sigaction sa;
@@ -32,7 +33,7 @@ main(int argc, char **argv)
     sa.sa_flags = 0;
     if (sigaction(SIGINT, &sa, nullptr) < 0) {
         std::perror("sigaction(SIGINT)");
-        return 1;
+        return EC_ERROR;
     }
 
     std::string shmname {"/shmem-"};
@@ -41,7 +42,7 @@ main(int argc, char **argv)
     int shmfd = shm_open(shmname.data(), O_RDWR, 0600);
     if (shmfd < 0) {
         std::perror("shm_open");
-        return 1;
+        return EC_ERROR;
     }
 
     {
@@ -82,8 +83,8 @@ main(int argc, char **argv)
 
     if (shm_unlink(shmname.data()) < 0) {
         std::perror("shm_unlink");
-        return 1;
+        return EC_ERROR;
     }
 
-    return 0;
+    return EC_SUCCESS;
 }
