@@ -10,6 +10,44 @@
 #include "common.hpp"
 #include "shmem.hpp"
 
+static void
+run_recv(int shmfd)
+{
+    ShmemBuffer shm {shmfd};
+
+    for (;;) {
+        if (saw_sigint) {
+            shm.sendReadEof();
+            break;
+        }
+
+        try {
+            if (!shm.waitRead()) {
+                break;
+            }
+        } catch (const std::system_error &e) {
+            if (e.code().value() == EINTR) {
+                continue;
+            } else {
+                throw;
+            }
+        }
+
+        const char *payload = reinterpret_cast<const char *>(shm.data());
+
+        const void *dataend = std::memchr(shm.data(), 0, shm.size());
+        const char *end = reinterpret_cast<const char *>(
+            (dataend == nullptr) ? shm.data() + shm.size() : dataend);
+
+        std::string s {payload, end};
+
+        std::cout << s;
+        std::cout.flush();
+
+        shm.sendDoneReading();
+    }
+}
+
 int
 main(int argc, char **argv)
 {
@@ -29,41 +67,7 @@ main(int argc, char **argv)
         return EC_ERROR;
     }
 
-    {
-        ShmemBuffer shm {shmfd};
-
-        for (;;) {
-            if (saw_sigint) {
-                shm.sendReadEof();
-                break;
-            }
-
-            try {
-                if (!shm.waitRead()) {
-                    break;
-                }
-            } catch (const std::system_error &e) {
-                if (e.code().value() == EINTR) {
-                    continue;
-                } else {
-                    throw;
-                }
-            }
-
-            const char *payload = reinterpret_cast<const char *>(shm.data());
-
-            const void *dataend = std::memchr(shm.data(), 0, shm.size());
-            const char *end = reinterpret_cast<const char *>(
-                (dataend == nullptr) ? shm.data() + shm.size() : dataend);
-
-            std::string s {payload, end};
-
-            std::cout << s;
-            std::cout.flush();
-
-            shm.sendDoneReading();
-        }
-    }
+    run_recv(shmfd);
 
     if (shm_unlink(shmname.data()) < 0) {
         std::perror("shm_unlink");

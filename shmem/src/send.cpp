@@ -13,6 +13,7 @@
 static constexpr size_t DEFAULT_BUFFER_SIZE = 4;
 
 struct ProgramOptions {
+    const char *progname;
     const char *name;
     size_t bufsize;
 };
@@ -24,6 +25,7 @@ parse_cmdline(int argc, char **argv, ProgramOptions &opts)
         return false;
     }
 
+    opts.progname = argv[0];
     opts.name = argv[1];
 
     opts.bufsize = DEFAULT_BUFFER_SIZE;
@@ -35,6 +37,42 @@ parse_cmdline(int argc, char **argv, ProgramOptions &opts)
     }
 
     return true;
+}
+
+static void
+run_send(int shmfd, const ProgramOptions &opts)
+{
+    ShmemBuffer shm {shmfd, opts.bufsize};
+
+    std::string buf;
+    bool done = false;
+    while (!done) {
+        std::getline(std::cin, buf);
+        if (saw_sigint
+            || std::cin.eof()) {
+            break;
+        }
+
+        buf.push_back('\n');
+
+        const char *end = buf.data() + buf.size() + 1;
+        for (const char *iter = buf.data(); iter != end;) {
+            if (!shm.waitWrite()) {
+                std::cerr << opts.progname << ": channel closed on read end\n";
+                done = true;
+                break;
+            }
+
+            auto tail = std::min(iter + shm.size(), end);
+            std::copy(iter, tail, shm.begin());
+
+            iter = tail;
+
+            shm.sendDoneWriting();
+        }
+    }
+
+    shm.sendWriteEof();
 }
 
 int
@@ -63,39 +101,7 @@ main(int argc, char **argv)
         return EC_ERROR;
     }
 
-    {
-        ShmemBuffer shm {shmfd, opts.bufsize};
-
-        std::string buf;
-        bool done = false;
-        while (!done) {
-            std::getline(std::cin, buf);
-            if (saw_sigint
-                || std::cin.eof()) {
-                break;
-            }
-
-            buf.push_back('\n');
-
-            const char *end = buf.data() + buf.size() + 1;
-            for (const char *iter = buf.data(); iter != end;) {
-                if (!shm.waitWrite()) {
-                    std::cerr << argv[0] << ": channel closed on read end\n";
-                    done = true;
-                    break;
-                }
-
-                auto tail = std::min(iter + shm.size(), end);
-                std::copy(iter, tail, shm.begin());
-
-                iter = tail;
-
-                shm.sendDoneWriting();
-            }
-        }
-
-        shm.sendWriteEof();
-    }
+    run_send(shmfd, opts);
 
     return EC_SUCCESS;
 }
