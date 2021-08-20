@@ -7,4 +7,8 @@ enum ExitCode {
     EC_BAD_USAGE = 2,
 };
 
+extern bool saw_sigint;
+
+void setup_sigint_handler();
+
 #endif

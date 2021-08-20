@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(COMMON_SOURCES
+  src/shmem.cpp
+  src/common.cpp
+)
+
 add_compile_options(
   -Wall
   -Wextra
@@ -13,7 +18,7 @@ add_compile_options(
 
 add_executable(send
   src/send.cpp
-  src/shmem.cpp
+  ${COMMON_SOURCES}
 )
 target_link_libraries(send
   PRIVATE -lrt
@@ -22,7 +27,7 @@ target_link_libraries(send
 
 add_executable(recv
   src/recv.cpp
-  src/shmem.cpp
+  ${COMMON_SOURCES}
 )
 target_link_libraries(recv
   PRIVATE -lrt

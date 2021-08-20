@@ -10,15 +10,6 @@
 #include "common.hpp"
 #include "shmem.hpp"
 
-static bool saw_sigint = false;
-
-static void
-handle_sigint(int)
-{
-    saw_sigint = true;
-    std::cerr.put('\n');
-}
-
 int
 main(int argc, char **argv)
 {
@@ -27,14 +18,7 @@ main(int argc, char **argv)
         return EC_BAD_USAGE;
     }
 
-    struct sigaction sa;
-    sa.sa_handler = handle_sigint;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = 0;
-    if (sigaction(SIGINT, &sa, nullptr) < 0) {
-        std::perror("sigaction(SIGINT)");
-        return EC_ERROR;
-    }
+    setup_sigint_handler();
 
     std::string shmname {"/shmem-"};
     shmname.append(argv[1]);
