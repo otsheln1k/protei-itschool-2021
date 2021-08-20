@@ -12,30 +12,50 @@
 
 static constexpr size_t DEFAULT_BUFFER_SIZE = 4;
 
+struct ProgramOptions {
+    const char *name;
+    size_t bufsize;
+};
+
+static bool
+parse_cmdline(int argc, char **argv, ProgramOptions &opts)
+{
+    if (2 > argc || argc > 3) {
+        return false;
+    }
+
+    opts.name = argv[1];
+
+    opts.bufsize = DEFAULT_BUFFER_SIZE;
+    if (argc >= 3) {
+        if (std::sscanf(argv[2], "%zu", &opts.bufsize) != 1
+            || opts.bufsize == 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 int
 main(int argc, char **argv)
 {
-    if (2 > argc || argc > 3) {
-        std::cerr << "usage: " << argv[0] << " NAME [BUFSIZE]\n";
+    ProgramOptions opts;
+    if (!parse_cmdline(argc, argv, opts)) {
+        std::cerr
+            << "usage: " << argv[0] << " NAME [BUFSIZE]\n"
+            << "  NAME is a \"channel\" identifier. It is used to\n"
+            << "    construct a shm object name.\n"
+            << "  BUFSIZE (positive integer) is the buffer size to\n"
+            << "    use for messages. The actual shm area size will\n"
+            << "    be bigger by 2*sizeof(shm_t).\n";
         return EC_BAD_USAGE;
-    }
-
-    size_t bufsize = DEFAULT_BUFFER_SIZE;
-    if (argc >= 3) {
-        if (std::sscanf(argv[2], "%zu", &bufsize) != 1) {
-            std::cerr << argv[0] << ": invalid buffer size\n";
-            return EC_BAD_USAGE;
-        }
-        if (bufsize == 0) {
-            std::cerr << argv[0] << ": buffer size must be > 0\n";
-            return EC_BAD_USAGE;
-        }
     }
 
     setup_sigint_handler();
 
     std::string shmname {"/shmem-"};
-    shmname.append(argv[1]);
+    shmname.append(opts.name);
 
     int shmfd = shm_open(shmname.data(), O_RDWR | O_CREAT, 0600);
     if (shmfd < 0) {
@@ -44,7 +64,7 @@ main(int argc, char **argv)
     }
 
     {
-        ShmemBuffer shm {shmfd, bufsize};
+        ShmemBuffer shm {shmfd, opts.bufsize};
 
         std::string buf;
         bool done = false;
